@@ -1,0 +1,17 @@
+{
+  "name": "vinnotube",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VinnoTube brings friends together for synchronized video watch parties.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "simulate": "node scripts/simulate-room.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
