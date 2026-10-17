@@ -1416,3 +1416,102 @@ renderPoll();
 renderReadyCheck();
 $('#editNameButton').textContent = initials(state.userName);
 connect();
+
+/* ---- Player chrome: full screen, auto-hiding controls, click-to-pause ----
+   Additive UI layer. It only toggles classes, adds one button and forwards clicks to the existing
+   play button, so room sync and admin rules in the code above are unchanged. */
+(() => {
+  const frame = document.getElementById('playerFrame');
+  const controls = document.getElementById('youtubeControls');
+  const playButton = document.getElementById('youtubePlayButton');
+  const volumeGroup = document.querySelector('.player-volume');
+  if (!frame || !controls || !playButton || !volumeGroup) return;
+
+  const IDLE_MS = 2800;
+  const canFullscreen = Boolean(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  let lastActivity = Date.now();
+  let lastPointerType = 'mouse';
+  let clickTimer = 0;
+
+  // Catches pointer events that would otherwise land inside the YouTube iframe, which is what
+  // kept YouTube's own title bar, logo and "More videos" panel appearing over our controls.
+  const shield = document.createElement('div');
+  shield.className = 'player-shield';
+  shield.id = 'playerShield';
+  frame.insertBefore(shield, controls);
+
+  const isPlaying = () => playButton.textContent.trim() === 'Ⅱ';
+  const wake = () => { lastActivity = Date.now(); frame.classList.remove('controls-idle'); };
+  // Mouse clicks leave focus on whichever control was clicked (the full-screen button, the play button),
+  // so focus alone must not keep the bar open. Only keyboard focus, or an open speed dropdown, does.
+  let keyboardNav = false;
+  window.addEventListener('keydown', (event) => { if (event.key === 'Tab') keyboardNav = true; }, true);
+  window.addEventListener('pointerdown', () => { keyboardNav = false; }, true);
+  controls.addEventListener('change', (event) => { if (event.target.tagName === 'SELECT') event.target.blur(); });
+  const evaluate = () => {
+    const active = document.activeElement;
+    const inControls = Boolean(active && controls.contains(active));
+    const busy = !isPlaying() || (inControls && (keyboardNav || active.tagName === 'SELECT'));
+    frame.classList.toggle('controls-idle', !busy && Date.now() - lastActivity > IDLE_MS);
+  };
+  setInterval(evaluate, 400);
+
+  frame.addEventListener('pointermove', wake);
+  frame.addEventListener('pointerdown', (event) => { lastPointerType = event.pointerType || 'mouse'; wake(); });
+  frame.addEventListener('keydown', wake);
+  frame.addEventListener('focusin', wake);
+  frame.addEventListener('pointerleave', () => { lastActivity = Date.now() - IDLE_MS + 700; });
+
+  async function toggleFullscreen() {
+    try {
+      if (fullscreenElement()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else await (frame.requestFullscreen || frame.webkitRequestFullscreen).call(frame);
+    } catch { /* The browser refused full screen (for example, no user gesture). */ }
+  }
+
+  let fullscreenButton = null;
+  if (canFullscreen) {
+    fullscreenButton = document.createElement('button');
+    fullscreenButton.type = 'button';
+    fullscreenButton.id = 'fullscreenButton';
+    fullscreenButton.addEventListener('click', toggleFullscreen);
+    volumeGroup.append(fullscreenButton);
+  }
+  const ICON_ENTER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  const ICON_EXIT = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+  function syncFullscreenState() {
+    const active = fullscreenElement() === frame;
+    frame.classList.toggle('is-fullscreen', active);
+    if (fullscreenButton) {
+      fullscreenButton.innerHTML = active ? ICON_EXIT : ICON_ENTER;
+      fullscreenButton.setAttribute('aria-label', active ? 'Exit full screen' : 'Full screen');
+      fullscreenButton.title = active ? 'Exit full screen (F)' : 'Full screen (F)';
+    }
+    if (fullscreenButton && !keyboardNav) fullscreenButton.blur();
+    wake();
+  }
+  document.addEventListener('fullscreenchange', syncFullscreenState);
+  document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+  syncFullscreenState();
+
+  // Click = play/pause (admin only, via the existing button); double-click = full screen.
+  shield.addEventListener('click', () => {
+    const wasIdle = frame.classList.contains('controls-idle');
+    wake();
+    if (lastPointerType === 'touch' && wasIdle) return;
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => playButton.click(), 240);
+  });
+  shield.addEventListener('dblclick', () => {
+    clearTimeout(clickTimer);
+    if (canFullscreen) toggleFullscreen();
+  });
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key.toLowerCase() !== 'f' || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.closest?.('input, textarea, select, [contenteditable], dialog')) return;
+    if (!canFullscreen || controls.hidden) return;
+    toggleFullscreen();
+  });
+})();

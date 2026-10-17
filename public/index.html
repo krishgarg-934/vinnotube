@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#090909">
+    <meta name="theme-color" content="#141414">
     <meta name="description" content="VinnoTube brings your movie night together with synced playback, room chat and shared picks.">
     <title>VinnoTube — watch together</title>
     <link rel="preconnect" href="https://media.w3.org">
@@ -127,18 +127,6 @@
             </div>
           </section>
 
-          <section class="discover-section" id="discover" aria-labelledby="discoverTitle">
-            <div class="section-heading-row">
-              <div><p class="eyebrow">FEATURED MARVEL MOMENTS</p><h2 id="discoverTitle">Avengers clips for your watch party</h2></div>
-              <button class="button button-outline" id="addVideoButton" type="button"><span class="button-icon">＋</span> Add a video link</button>
-            </div>
-            <div class="discovery-tools">
-              <label class="search-field" for="movieSearch"><span class="search-icon" aria-hidden="true">⌕</span><input id="movieSearch" type="search" placeholder="Search by title, mood or genre" autocomplete="off"><kbd>Ctrl K</kbd></label>
-              <div class="filter-row" id="genreFilters" aria-label="Filter movies by genre"></div>
-            </div>
-            <div class="movie-grid" id="movieGrid" aria-live="polite"></div>
-            <p class="catalog-note">Official Marvel videos play from YouTube. Add another embeddable YouTube link or a direct MP4/WebM video.</p>
-          </section>
         </div>
 
         <aside class="side-column" aria-label="Room activity">
@@ -179,6 +167,19 @@
           </section>
         </aside>
       </div>
+
+      <section class="discover-section" id="discover" aria-labelledby="discoverTitle">
+        <div class="section-heading-row">
+          <div><p class="eyebrow">FEATURED MARVEL MOMENTS</p><h2 id="discoverTitle">Avengers clips for your watch party</h2></div>
+          <button class="button button-outline" id="addVideoButton" type="button"><span class="button-icon">＋</span> Add a video link</button>
+        </div>
+        <div class="discovery-tools">
+          <label class="search-field" for="movieSearch"><span class="search-icon" aria-hidden="true">⌕</span><input id="movieSearch" type="search" placeholder="Search by title, mood or genre" autocomplete="off"><kbd>Ctrl K</kbd></label>
+          <div class="filter-row" id="genreFilters" aria-label="Filter movies by genre"></div>
+        </div>
+        <div class="movie-grid" id="movieGrid" aria-live="polite"></div>
+        <p class="catalog-note">Official Marvel videos play from YouTube. Add another embeddable YouTube link or a direct MP4/WebM video.</p>
+      </section>
 
       <footer class="page-footer"><span>Made for the “you have to watch this” moments.</span><span>VINNOTUBE <i>✳</i></span></footer>
     </main>
