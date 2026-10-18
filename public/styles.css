@@ -323,8 +323,8 @@ body.scrolled .topbar {
 .reaction-float { position: absolute; z-index: 4; right: 20px; bottom: 130px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
 .floating-reaction {
   display: flex; align-items: center; gap: 8px; padding: 8px 16px;
-  border-radius: 999px; background: rgba(20, 20, 20, .35); border: 1px solid rgba(255, 255, 255, .14);
-  backdrop-filter: blur(6px); text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+  border-radius: 999px; background: rgba(20, 20, 20, .10); border: 1px solid rgba(255, 255, 255, .08);
+  backdrop-filter: blur(1px); text-shadow: 0 1px 4px rgba(0, 0, 0, .95), 0 0 10px rgba(0, 0, 0, .6);
   font-size: 13px; animation: reaction-float 3.5s var(--ease) forwards;
 }
 .floating-reaction span:first-child { font-size: 20px; }
@@ -818,7 +818,7 @@ html:has(#splash) { overflow: hidden; }
 .chat-float { position: absolute; z-index: 4; left: 28px; bottom: 150px; display: none; flex-direction: column; align-items: flex-start; gap: 8px; max-width: min(440px, 62%); pointer-events: none; }
 .player-frame.is-fullscreen .chat-float { display: flex; }
 .player-frame.is-fullscreen.alerts-off .chat-float, .player-frame.is-fullscreen.alerts-off .reaction-float { display: none; }
-.floating-chat { display: flex; flex-direction: column; gap: 2px; padding: 10px 16px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 16px; background: rgba(20, 20, 20, .38); backdrop-filter: blur(6px); text-shadow: 0 1px 3px rgba(0, 0, 0, .7); font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; animation: reaction-float 5s var(--ease) forwards; }
+.floating-chat { display: flex; flex-direction: column; gap: 2px; padding: 10px 16px; border: 1px solid rgba(255, 255, 255, .08); border-radius: 16px; background: rgba(20, 20, 20, .12); backdrop-filter: blur(1px); text-shadow: 0 1px 4px rgba(0, 0, 0, .95), 0 0 10px rgba(0, 0, 0, .6); font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; animation: reaction-float 5s var(--ease) forwards; }
 .floating-chat strong { color: #ff7a82; font-size: 12.5px; font-weight: 800; }
 .alerts-toggle { display: none !important; }
 .player-frame.is-fullscreen .alerts-toggle { display: grid !important; }
