@@ -31,7 +31,7 @@ The built-in picks use public W3C and MDN sample video files for demonstration. 
 
 Each discovery card has two separate actions: **Watch together** loads the clip into the synchronized room player, while **Open on YouTube** (or **Open video link**) opens its source page in a new browser tab. The red watch button has a short press/ripple animation and respects reduced-motion settings.
 
-When an admin adds a link, it loads into the shared player, ready for the admin to press Play. Other participants can add links to the shared playlist for the admin to select. Rooms start without an admin; any participant can claim control, and the admin can transfer it to a participant. Only the admin can play, pause, seek, choose/remove playlist entries, or create/close polls. Chat, reactions, suggestions, and poll voting are open to all participants.
+When an admin adds a link, it loads into the shared player, ready for the admin to press Play. Other participants can add links to the shared playlist for the admin to select. Rooms start without an admin; any participant can claim control, and the admin can transfer it to a participant. Only the admin can play, pause, seek (including double-tap the left/right third of the video to skip back/forward 5 s; keep tapping the same side to skip further), choose/remove playlist entries, or create/close polls. Chat, reactions, suggestions, and poll voting are open to all participants.
 
 ## Ready check and next-pick voting
 
@@ -39,11 +39,15 @@ Once a video is selected and paused, each participant can mark themselves ready 
 
 Everyone can vote for one upcoming playlist title at a time. Voting for another title moves your vote; pressing your selected vote again removes it. Upcoming titles are ordered by votes, with earlier additions winning ties. The current title stays pinned at the top, and only the admin can select or remove playlist entries.
 
+## Intro screen
+
+Every time the page is opened, a branded intro plays for about 5 seconds (4.4 s of loading plus a 0.6 s iris-out reveal) while the room connects behind it. It is plain HTML/CSS/canvas with no extra files. To change the length, edit `SPLASH_MS` at the top of `public/app.js`; the look lives under "Intro splash" in `public/styles.css` and the markup is the `#splash` block at the top of `public/index.html`. Visitors can press **Skip intro** or Esc. With the system "reduce motion" setting on, the movement is switched off and only the loading fill, percentage and status text animate.
+
 ## How synchronization works
 
 The Node server relays room events over WebSockets and serializes state changes in the order it receives them. Each room has one shared playback state and a server timestamp. New arrivals and reconnecting clients receive a snapshot, estimate server clock offset with periodic ping/pong messages, then seek to the current room position.
 
-Clients correct playback drift above 500 ms with a seek. For direct video URLs, drift between 120 and 500 ms is briefly corrected by adjusting playback speed. YouTube embeds use periodic drift checks and seek correction. Playback speed is shared from the room admin; volume and mute are saved locally per participant. Browser autoplay rules may require a participant to press Play once before a remote start can play on that device.
+Each client estimates the server clock from a burst of pings on connect and then every 4 s, trusting the lowest round-trip samples. The admin stamps every playback update with the server time at which the position was sampled (the server clamps that stamp to at most 3 s in the past), so the admin-to-server delay is not counted as lag. Listeners check drift every 250 ms. For direct video URLs, drift between 30 ms and 500 ms is corrected with a proportional, capped (±8%) speed change and anything larger with a seek. YouTube embeds only support fixed speeds, so drift above ~120 ms is corrected by running one speed step (usually ±0.25×) faster or slower until the gap closes, and drift above ~1 s (0.4 s when no speed step is available) with a seek. The admin's player is the reference and is only moved if it falls more than 1.5 s off. Playback speed is shared from the room admin; volume and mute are saved locally per participant. Browser autoplay rules may require a participant to press Play once before a remote start can play on that device.
 
 ## Performance target and measurement
 

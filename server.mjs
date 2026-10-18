@@ -15,6 +15,7 @@ const ROOM_IDLE_TTL_MS = 30 * 60 * 1000;
 const MAX_PARTICIPANTS = 25;
 const MAX_QUEUE_ITEMS = 50;
 const MAX_CHAT_ITEMS = 80;
+const MAX_STAMP_BACKDATE_MS = 3000;
 const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -48,6 +49,7 @@ function createRoom() {
     reactions: [],
     poll: null,
     idleTimer: null,
+    ghosts: new Map(),
   };
   roomMap.set(code, room);
   return room;
@@ -176,6 +178,27 @@ function systemChat(room, text) {
   broadcast(room, { type: 'chat', message });
 }
 
+const RESUME_GRACE_MS = 20_000;
+
+// Admin succession: the room always has an admin while anyone is present. The first person in becomes
+// admin; when the admin leaves, the participant who joined next (earliest joinedAt) takes over.
+// While a refreshing admin's seat is being held (grace period) nobody is promoted, so a page refresh
+// doesn't hand the role away.
+function ensureAdmin(room) {
+  if (room.adminId && room.participants.has(room.adminId)) return;
+  room.adminId = null;
+  for (const ghost of room.ghosts.values()) if (ghost.wasAdmin) return;
+  let next = null;
+  for (const candidate of room.participants.values()) {
+    if (!next || candidate.joinedAt < next.joinedAt) next = candidate;
+  }
+  if (!next) return;
+  room.adminId = next.id;
+  systemChat(room, `${next.name} is now the room admin.`);
+  broadcastParticipants(room);
+}
+const validToken = (value) => typeof value === 'string' && /^[A-Za-z0-9-]{16,64}$/.test(value);
+
 function detach(socket) {
   const room = roomMap.get(socket.roomCode);
   if (!room) return;
@@ -185,9 +208,24 @@ function detach(socket) {
   room.participants.delete(socket.id);
   socket.roomCode = null;
   if (participant) {
-    if (room.adminId === socket.id) {
-      room.adminId = null;
-      systemChat(room, `${participant.name} left. Admin controls are open for someone to claim.`);
+    const wasAdmin = room.adminId === socket.id;
+    if (wasAdmin) room.adminId = null;
+    const announceAdminLeft = () => {
+      if (wasAdmin && !room.adminId) ensureAdmin(room);
+    };
+    if (participant.token) {
+      // The member may just be refreshing the page. Hold their seat (and admin role) briefly so they
+      // come back as the same person instead of a stranger.
+      const previous = room.ghosts.get(participant.token);
+      if (previous) clearTimeout(previous.timer);
+      const timer = setTimeout(() => {
+        if (room.ghosts.get(participant.token)?.timer === timer) room.ghosts.delete(participant.token);
+        announceAdminLeft();
+      }, RESUME_GRACE_MS);
+      timer.unref?.();
+      room.ghosts.set(participant.token, { id: socket.id, wasAdmin, timer });
+    } else {
+      announceAdminLeft();
     }
     broadcastParticipants(room);
     if (hadVote) broadcastQueue(room, 'vote');
@@ -199,16 +237,54 @@ function detach(socket) {
   }
 }
 
-function join(socket, room, name) {
+function join(socket, room, name, token) {
   detach(socket);
   if (room.participants.size && room.countdown) cancelCountdown(room);
   clearTimeout(room.idleTimer);
+
+  // Resume: the same browser tab (same secret token) coming back after a refresh keeps its identity,
+  // admin role and seat. Covers both "old connection already closed" and "old one not closed yet".
+  let resumed = false;
+  if (validToken(token)) {
+    let adoptId = null;
+    let restoreAdmin = false;
+    for (const existing of [...room.participants.values()]) {
+      if (existing.token === token && existing.socket !== socket) {
+        adoptId = existing.id;
+        existing.socket.roomCode = null;
+        room.participants.delete(existing.id);
+        try { existing.socket.close(); } catch { /* already closed */ }
+      }
+    }
+    const ghost = room.ghosts.get(token);
+    if (ghost) {
+      clearTimeout(ghost.timer);
+      room.ghosts.delete(token);
+      if (!adoptId && !room.participants.has(ghost.id)) {
+        adoptId = ghost.id;
+        restoreAdmin = ghost.wasAdmin && !room.adminId;
+      }
+    }
+    if (adoptId) {
+      socket.id = adoptId;
+      if (restoreAdmin) room.adminId = adoptId;
+      resumed = true;
+    }
+  }
+
   socket.roomCode = room.code;
-  const participant = { id: socket.id, name: cleanName(name), joinedAt: Date.now(), socket, ready: false };
+  const participant = { id: socket.id, name: cleanName(name), joinedAt: Date.now(), socket, ready: false, token: validToken(token) ? token : null };
   room.participants.set(socket.id, participant);
+  // First person in (or the next one when the room has no admin) becomes admin automatically.
+  if (!room.adminId) {
+    let pendingAdmin = false;
+    for (const ghost of room.ghosts.values()) if (ghost.wasAdmin) pendingAdmin = true;
+    if (!pendingAdmin) room.adminId = socket.id;
+  }
   sendSnapshot(socket, room);
   broadcastParticipants(room);
-  if (room.participants.size > 1) systemChat(room, `${participant.name} joined the room.`);
+  if (!resumed && room.participants.size > 1) systemChat(room, `${participant.name} joined the room.`);
+  if (room.adminId === socket.id && !resumed && room.participants.size === 1) systemChat(room, `${participant.name} created the room and is the admin.`);
 }
 
 function normalizeMedia(value) {
@@ -275,7 +351,7 @@ function handleMessage(socket, raw) {
 
   if (message.type === 'create') {
     const room = createRoom();
-    join(socket, room, message.name);
+    join(socket, room, message.name, message.token);
     return;
   }
 
@@ -290,7 +366,7 @@ function handleMessage(socket, raw) {
       safeSend(socket, { type: 'error', message: `This room has reached its ${MAX_PARTICIPANTS}-person limit.` });
       return;
     }
-    join(socket, room, message.name);
+    join(socket, room, message.name, message.token);
     return;
   }
 
@@ -307,7 +383,13 @@ function handleMessage(socket, raw) {
       const currentTime = Number(message.currentTime);
       if (!Number.isFinite(currentTime) || currentTime < 0 || currentTime > 24 * 60 * 60) return;
       const rate = Number(message.rate);
-      room.playback = { playing: Boolean(message.playing), currentTime, rate: PLAYBACK_RATES.includes(rate) ? rate : 1, updatedAt: Date.now() };
+      // `at` is the admin's estimate (in server time) of the moment currentTime was sampled. Using it
+      // instead of the arrival time removes the admin -> server delay from everyone else's position.
+      // It is clamped so a bad clock estimate can never push the room more than a few seconds off.
+      const now = Date.now();
+      const claimedAt = Number(message.at);
+      const updatedAt = Number.isFinite(claimedAt) ? Math.min(now, Math.max(now - MAX_STAMP_BACKDATE_MS, claimedAt)) : now;
+      room.playback = { playing: Boolean(message.playing), currentTime, rate: PLAYBACK_RATES.includes(rate) ? rate : 1, updatedAt };
       if (room.playback.playing) clearReadiness(room);
       broadcast(room, { type: 'playback', playback: room.playback, actorId: participant.id });
       break;

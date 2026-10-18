@@ -1,26 +1,65 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="intro-hold">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#090909">
+    <meta name="theme-color" content="#141414">
     <meta name="description" content="VinnoTube brings your movie night together with synced playback, room chat and shared picks.">
     <title>VinnoTube — watch together</title>
     <link rel="preconnect" href="https://media.w3.org">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
     <link rel="stylesheet" href="/styles.css">
     <script src="/app.js" defer></script>
   </head>
   <body>
+    <div class="splash" id="splash" role="status" aria-label="Loading VinnoTube">
+      <div class="splash-stage">
+        <div class="splash-aurora" aria-hidden="true"><i class="aur-1"></i><i class="aur-2"></i><i class="aur-3"></i><i class="aur-4"></i></div>
+        <div class="splash-rays" aria-hidden="true"></div>
+        <div class="splash-floor" aria-hidden="true"><div class="splash-grid"></div></div>
+        <canvas class="splash-canvas" id="splashCanvas" aria-hidden="true"></canvas>
+        <div class="splash-vignette" aria-hidden="true"></div>
+        <div class="splash-center">
+          <div class="splash-mark" aria-hidden="true">
+            <svg viewBox="0 0 140 140" fill="none">
+              <defs>
+                <linearGradient id="splashGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#ff8a1f"/><stop offset=".5" stop-color="#ff3d4a"/><stop offset="1" stop-color="#e50914"/>
+                </linearGradient>
+              </defs>
+              <g class="mark-orbit">
+                <circle class="mark-hair" cx="70" cy="70" r="64"/>
+                <circle class="mark-arc" cx="70" cy="70" r="64" pathLength="100" stroke-dasharray="22 28" stroke-dashoffset="0"/>
+              </g>
+              <circle class="mark-track" cx="70" cy="70" r="54"/>
+              <circle class="mark-progress" id="splashRing" cx="70" cy="70" r="54" transform="rotate(-90 70 70)"/>
+              <path class="mark-play" d="M58 46v48l40-24z"/>
+            </svg>
+          </div>
+          <div class="splash-wordwrap" aria-hidden="true">
+            <div class="splash-word"><span>V</span><span>I</span><span>N</span><span>N</span><span>O</span><span>T</span><span>U</span><span>B</span><span>E</span></div>
+            <div class="splash-word splash-word-fill">VINNOTUBE</div>
+            <i class="splash-scan"></i>
+          </div>
+          <p class="splash-tagline" id="splashTagline" aria-hidden="true">Dimming the lights</p>
+          <p class="splash-meter" aria-hidden="true"><span id="splashPercent">0</span><small>%</small></p>
+        </div>
+        <button class="splash-skip" id="splashSkip" type="button">Skip intro</button>
+      </div>
+    </div>
     <header class="topbar">
       <a class="brand" href="#top" aria-label="VinnoTube home">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
-        <span>VINNOTUBE<span class="brand-period">.</span></span>
+        <span>VINNOTUBE</span>
       </a>
       <nav class="top-nav" aria-label="Main navigation">
         <a class="nav-link active" href="#watch-room">Watch room</a>
         <a class="nav-link" href="#discover">Discover</a>
       </nav>
       <div class="top-actions">
+        <button class="nav-search" id="navSearchButton" type="button" aria-label="Search titles" title="Search (Ctrl K)"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
         <span class="connection-indicator" id="connectionIndicator"><span></span><b id="connectionText">Connecting</b></span>
         <button class="avatar-button" id="editNameButton" aria-label="Change your display name" title="Change display name">G</button>
       </div>
@@ -49,7 +88,7 @@
                 <button class="button button-quiet participants-button" id="participantsButton" type="button">♙ People <span class="people-button-count" id="participantsButtonCount">1</span></button>
                 <button class="button button-quiet" id="joinRoomButton" type="button"><span class="button-icon">↗</span> Join a room</button>
                 <button class="button button-primary" id="inviteButton" type="button"><span class="button-icon">＋</span> Invite friends</button>
-                <button class="icon-button" id="newRoomButton" type="button" aria-label="Start a new room" title="Start a new room">↻</button>
+                <button class="icon-button" id="newRoomButton" type="button" aria-label="Refresh room" title="Refresh room (stays in this room)">↻</button>
               </div>
             </div>
 
@@ -75,11 +114,16 @@
                 <div class="empty-orbit orbit-one"></div><div class="empty-orbit orbit-two"></div>
                 <div class="empty-play-mark">▶</div>
                 <p class="empty-kicker">TONIGHT'S FEATURE</p>
+                <div class="hero-tags" aria-hidden="true"><span>Watch party</span><span>Synced playback</span><span>Live chat</span></div>
                 <h3>Your next great<br>movie night starts here.</h3>
                 <p class="empty-copy">Pick a favorite and bring everyone along.</p>
-                <button class="button button-primary" type="button" data-scroll-discover>Explore titles <span aria-hidden="true">›</span></button>
+                <div class="hero-actions">
+                  <button class="button button-primary" type="button" data-scroll-discover><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M8.5 5.6v12.8a.8.8 0 0 0 1.2.7l10-6.4a.8.8 0 0 0 0-1.4l-10-6.4a.8.8 0 0 0-1.2.7z"/></svg> Browse titles</button>
+                  <button class="button button-quiet" type="button" id="heroInviteButton"><span class="button-icon" aria-hidden="true">＋</span> Invite friends</button>
+                </div>
               </div>
               <div class="reaction-float" id="reactionFloat" aria-live="polite"></div>
+              <div class="chat-float" id="chatFloat" aria-hidden="true"></div>
             </div>
 
             <div class="now-playing-row">
@@ -127,18 +171,6 @@
             </div>
           </section>
 
-          <section class="discover-section" id="discover" aria-labelledby="discoverTitle">
-            <div class="section-heading-row">
-              <div><p class="eyebrow">FEATURED MARVEL MOMENTS</p><h2 id="discoverTitle">Avengers clips for your watch party</h2></div>
-              <button class="button button-outline" id="addVideoButton" type="button"><span class="button-icon">＋</span> Add a video link</button>
-            </div>
-            <div class="discovery-tools">
-              <label class="search-field" for="movieSearch"><span class="search-icon" aria-hidden="true">⌕</span><input id="movieSearch" type="search" placeholder="Search by title, mood or genre" autocomplete="off"><kbd>Ctrl K</kbd></label>
-              <div class="filter-row" id="genreFilters" aria-label="Filter movies by genre"></div>
-            </div>
-            <div class="movie-grid" id="movieGrid" aria-live="polite"></div>
-            <p class="catalog-note">Official Marvel videos play from YouTube. Add another embeddable YouTube link or a direct MP4/WebM video.</p>
-          </section>
         </div>
 
         <aside class="side-column" aria-label="Room activity">
@@ -147,6 +179,7 @@
             <ul class="people-list" id="peopleList"></ul>
             <div class="admin-control" id="adminControl"></div>
             <button class="text-button invite-inline" id="inviteInlineButton" type="button">＋ Invite someone to join</button>
+            <button class="text-button invite-inline new-room-inline" id="newRoomInlineButton" type="button">↻ Start a new room instead</button>
           </section>
 
           <section class="side-card panel queue-card" aria-labelledby="queueTitle">
@@ -179,6 +212,19 @@
           </section>
         </aside>
       </div>
+
+      <section class="discover-section" id="discover" aria-labelledby="discoverTitle">
+        <div class="section-heading-row">
+          <div><p class="eyebrow">FEATURED FILMS</p><h2 id="discoverTitle">Cinematic picks for your watch party</h2></div>
+          <button class="button button-outline" id="addVideoButton" type="button"><span class="button-icon">＋</span> Add a video link</button>
+        </div>
+        <div class="discovery-tools">
+          <label class="search-field" for="movieSearch"><span class="search-icon" aria-hidden="true">⌕</span><input id="movieSearch" type="search" placeholder="Search by title, mood or genre" autocomplete="off"><kbd>Ctrl K</kbd></label>
+          <div class="filter-row" id="genreFilters" aria-label="Filter movies by genre"></div>
+        </div>
+        <div class="movie-grid" id="movieGrid" aria-live="polite"></div>
+        <p class="catalog-note">Open-licensed films by the Blender Foundation play from YouTube. Add another embeddable YouTube link or a direct MP4/WebM video.</p>
+      </section>
 
       <footer class="page-footer"><span>Made for the “you have to watch this” moments.</span><span>VINNOTUBE <i>✳</i></span></footer>
     </main>
