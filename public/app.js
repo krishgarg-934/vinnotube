@@ -1,23 +1,172 @@
+/* ---- Intro splash: ~5 s branded loading screen on every page open ----
+   Runs first, before the rest of the app starts up. The room connection keeps loading behind it.
+   Timeline: SPLASH_MS in total = loading (fills the logo) then a short iris-out reveal. */
+(() => {
+  const SPLASH_MS = 5000;
+  const EXIT_MS = 600;
+  const LOAD_MS = SPLASH_MS - EXIT_MS;
+  const root = document.getElementById('splash');
+  if (!root) return;
+  const ring = document.getElementById('splashRing');
+  const percent = document.getElementById('splashPercent');
+  const tagline = document.getElementById('splashTagline');
+  const canvas = document.getElementById('splashCanvas');
+  const lines = ['Dimming the lights', 'Gathering your crew', 'Syncing the room', 'Rolling the film'];
+  const RING_LENGTH = 339.3;
+  const startedAt = performance.now();
+  let frame = 0;
+  let leaving = false;
+  let lineIndex = 0;
+  let lastPercent = -1;
+  let stopEmbers = () => {};
+
+  // Floating embers: small glowing sparks drifting upward and swaying.
+  function startEmbers() {
+    const ctx = canvas?.getContext?.('2d');
+    if (!ctx || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return () => {};
+    const colors = ['255,61,74', '255,138,31', '255,45,111', '255,255,255'];
+    let width = 0;
+    let height = 0;
+    let running = true;
+    let raf = 0;
+    let last = performance.now();
+    const embers = [];
+    const spawn = (anywhere) => ({
+      x: Math.random() * width,
+      y: anywhere ? Math.random() * height : height + 10,
+      r: 0.8 + Math.random() * 2.4,
+      speed: 18 + Math.random() * 46,
+      sway: 0.6 + Math.random() * 1.6,
+      phase: Math.random() * Math.PI * 2,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      alpha: 0.35 + Math.random() * 0.55,
+    });
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = canvas.clientWidth;
+      height = canvas.clientHeight;
+      canvas.width = Math.max(1, Math.round(width * dpr));
+      canvas.height = Math.max(1, Math.round(height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const target = width < 700 ? 36 : 72;
+      while (embers.length < target) embers.push(spawn(true));
+      embers.length = target;
+    };
+    const tick = (now) => {
+      if (!running) return;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      ctx.clearRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < embers.length; i += 1) {
+        const e = embers[i];
+        e.y -= e.speed * dt;
+        e.phase += e.sway * dt;
+        e.x += Math.sin(e.phase) * 14 * dt;
+        if (e.y < -10) embers[i] = spawn(false);
+        const fade = Math.min(1, Math.max(0, e.y / (height * 0.35)));
+        ctx.fillStyle = `rgba(${e.color},${(e.alpha * 0.16 * fade).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 3.2, 0, 6.2832); ctx.fill();
+        ctx.fillStyle = `rgba(${e.color},${(e.alpha * fade).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, 6.2832); ctx.fill();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    raf = requestAnimationFrame(tick);
+    return () => { running = false; cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  }
+
+  function paint(t) {
+    // Gentle ease: a little slower at the very start and end, never stalls.
+    const p = 0.3 * t + 0.7 * (0.5 - 0.5 * Math.cos(Math.PI * t));
+    root.style.setProperty('--p', p.toFixed(4));
+    root.style.setProperty('--scan', p > 0.015 && p < 0.995 ? '1' : '0');
+    ring.style.strokeDashoffset = String(RING_LENGTH * (1 - p));
+    const shown = Math.round(p * 100);
+    if (shown !== lastPercent) { lastPercent = shown; percent.textContent = String(shown); }
+    const nextLine = Math.min(lines.length - 1, Math.floor(t * lines.length));
+    if (nextLine !== lineIndex) {
+      lineIndex = nextLine;
+      tagline.textContent = lines[lineIndex];
+      tagline.classList.remove('swap');
+      void tagline.offsetWidth; // restart the little fade-up
+      tagline.classList.add('swap');
+    }
+  }
+
+  function loop(now) {
+    const t = Math.min(1, (now - startedAt) / LOAD_MS);
+    paint(t);
+    if (t < 1 && !leaving) frame = requestAnimationFrame(loop);
+    else leave();
+  }
+
+  function leave(skipped) {
+    if (leaving) return;
+    leaving = true;
+    cancelAnimationFrame(frame);
+    if (!skipped) paint(1);
+    root.classList.add('is-leaving');
+    document.documentElement.classList.remove('intro-hold');
+    document.documentElement.classList.add('intro-play');
+    setTimeout(() => { stopEmbers(); root.remove(); }, EXIT_MS + 60);
+  }
+
+  stopEmbers = startEmbers();
+  frame = requestAnimationFrame(loop);
+  // Browsers pause animation frames in background tabs, so a plain timer guarantees the intro ends.
+  setTimeout(() => leave(), SPLASH_MS);
+  document.getElementById('splashSkip')?.addEventListener('click', () => leave(true));
+  window.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !leaving) leave(true); });
+})();
+
 const catalog = [
   {
-    id: 'avengers-endgame-clip', title: 'Avengers: Endgame — Film Clip', year: '2019', genre: 'Movie Clip',
-    description: 'An official Marvel Studios clip from Avengers: Endgame.',
-    src: 'https://www.youtube.com/watch?v=9QbltzIUV6w', poster: 'https://i.ytimg.com/vi/9QbltzIUV6w/hqdefault.jpg', theme: 'tears',
+    id: 'sintel', title: 'Sintel', year: '2010', genre: 'Fantasy',
+    description: 'A lone warrior searches the wilds for the dragon she lost.',
+    src: 'https://www.youtube.com/watch?v=eRsGyueVLvQ', poster: 'https://i.ytimg.com/vi/eRsGyueVLvQ/hqdefault.jpg', theme: 'tears',
   },
   {
-    id: 'avengers-endgame-to-the-end', title: 'Avengers: Endgame — To the End', year: '2019', genre: 'Featurette',
-    description: 'A Marvel look back at the heroes and their final promise.',
-    src: 'https://www.youtube.com/watch?v=0jNvJU52LvU', poster: 'https://i.ytimg.com/vi/0jNvJU52LvU/hqdefault.jpg', theme: 'escape',
+    id: 'tears-of-steel', title: 'Tears of Steel', year: '2012', genre: 'Sci-Fi',
+    description: 'Amsterdam, robots, and one last chance to fix the past.',
+    src: 'https://www.youtube.com/watch?v=R6MlUcmOul8', poster: 'https://i.ytimg.com/vi/R6MlUcmOul8/hqdefault.jpg', theme: 'escape',
   },
   {
-    id: 'avengers-endgame-trailer', title: 'Avengers: Endgame — Official Trailer', year: '2019', genre: 'Trailer',
-    description: 'The official Marvel Studios trailer. Whatever it takes.',
-    src: 'https://www.youtube.com/watch?v=TcMBFSGVi1c', poster: 'https://i.ytimg.com/vi/TcMBFSGVi1c/hqdefault.jpg', theme: 'joyride',
+    id: 'big-buck-bunny', title: 'Big Buck Bunny', year: '2008', genre: 'Animation',
+    description: 'A gentle giant rabbit gets even with three troublemaking rodents.',
+    src: 'https://www.youtube.com/watch?v=YE7VzlLtp-4', poster: 'https://i.ytimg.com/vi/YE7VzlLtp-4/hqdefault.jpg', theme: 'joyride',
   },
   {
-    id: 'avengers-infinity-war-trailer', title: 'Avengers: Infinity War — Official Trailer', year: '2017', genre: 'Trailer',
-    description: 'The Avengers and their allies face their biggest threat.',
-    src: 'https://www.youtube.com/watch?v=6ZfuNTqbHE8', poster: 'https://i.ytimg.com/vi/6ZfuNTqbHE8/hqdefault.jpg', theme: 'fun',
+    id: 'elephants-dream', title: 'Elephants Dream', year: '2006', genre: 'Sci-Fi',
+    description: 'Two strangers wander a surreal machine world.',
+    src: 'https://www.youtube.com/watch?v=4eJVGqJhp40', poster: 'https://i.ytimg.com/vi/4eJVGqJhp40/hqdefault.jpg', theme: 'fun',
+  },
+  {
+    id: 'spring', title: 'Spring', year: '2019', genre: 'Fantasy',
+    description: 'A shepherd girl and her dog face the spirits of the seasons.',
+    src: 'https://www.youtube.com/watch?v=WhWc3b3KhnY', poster: 'https://i.ytimg.com/vi/WhWc3b3KhnY/hqdefault.jpg', theme: 'tears',
+  },
+  {
+    id: 'coffee-run', title: 'Coffee Run', year: '2020', genre: 'Animation',
+    description: 'A wild, funny dash back through one morning’s memories.',
+    src: 'https://www.youtube.com/watch?v=PVGeM40dABA', poster: 'https://i.ytimg.com/vi/PVGeM40dABA/hqdefault.jpg', theme: 'escape',
+  },
+  {
+    id: 'sprite-fright', title: 'Sprite Fright', year: '2021', genre: 'Comedy',
+    description: 'An 80s-style horror comedy with very angry mushrooms.',
+    src: 'https://www.youtube.com/watch?v=_cMxraX_5RE', poster: 'https://i.ytimg.com/vi/_cMxraX_5RE/hqdefault.jpg', theme: 'joyride',
+  },
+  {
+    id: 'cosmos-laundromat', title: 'Cosmos Laundromat', year: '2015', genre: 'Animation',
+    description: 'A sheep on a quiet island meets a salesman with a strange offer.',
+    src: 'https://www.youtube.com/watch?v=Y-rmzh0PI3c', poster: 'https://i.ytimg.com/vi/Y-rmzh0PI3c/hqdefault.jpg', theme: 'fun',
+  },
+  {
+    id: 'caminandes-llamigos', title: 'Caminandes: Llamigos', year: '2016', genre: 'Animation',
+    description: 'Koro the llama and a rival penguin-loving pal team up.',
+    src: 'https://www.youtube.com/watch?v=SkVqJ1SGeL0', poster: 'https://i.ytimg.com/vi/SkVqJ1SGeL0/hqdefault.jpg', theme: 'tears',
   },
 ];
 
@@ -31,7 +180,23 @@ const local = {
   },
 };
 
-const queryRoom = new URLSearchParams(location.search).get('room')?.trim().toUpperCase() || '';
+const tabStore = {
+  get(key) { try { return sessionStorage.getItem(key); } catch { return null; } },
+  set(key, value) { try { sessionStorage.setItem(key, value); } catch { /* Storage can be disabled by the browser. */ } },
+};
+// Secret per-tab token: lets the server recognise this tab after a refresh (works on plain-http LAN addresses too).
+const clientToken = (() => {
+  let token = tabStore.get('vinnotube-token');
+  if (!token) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    token = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    tabStore.set('vinnotube-token', token);
+  }
+  return token;
+})();
+// The room in the address bar wins; otherwise fall back to the room this tab was last in.
+const queryRoom = (new URLSearchParams(location.search).get('room') || tabStore.get('vinnotube-room') || '').trim().toUpperCase();
 const savedFavorites = (() => {
   try { return new Set(JSON.parse(local.get('vinnotube-favorites', local.get('reelroom-favorites', '[]')))); } catch { return new Set(); }
 })();
@@ -62,6 +227,8 @@ const state = {
   search: '',
   favorites: savedFavorites,
   syncOffsetMs: 0,
+  clockSamples: [],
+  nudgeDir: 0,
   latencySamples: [],
   reconnectAttempt: 0,
   reconnectTimer: null,
@@ -328,6 +495,14 @@ function send(payload) {
     showToast('Reconnecting to your room…');
     return false;
   }
+  // Tell the server when (in server time) this position was sampled, so network delay on the way
+  // to the server is not counted as lag by everyone else.
+  if (payload.type === 'playback' && payload.at === undefined) {
+    payload.at = Date.now() + state.syncOffsetMs;
+    // The admin's own change is the truth: apply it locally right away so the next drift check
+    // doesn't compare the player against the previous position while the server echo is in flight.
+    if (isAdmin()) state.playback = { ...state.playback, playing: Boolean(payload.playing), currentTime: payload.currentTime, rate: Number(payload.rate) || 1, updatedAt: payload.at };
+  }
   state.socket.send(JSON.stringify(payload));
   return true;
 }
@@ -350,8 +525,8 @@ function connect() {
   socket.addEventListener('open', () => {
     state.reconnectAttempt = 0;
     setConnection('online', 'Connected');
-    if (state.roomCode) send({ type: 'join', room: state.roomCode, name: state.userName });
-    else send({ type: 'create', name: state.userName });
+    if (state.roomCode) send({ type: 'join', room: state.roomCode, name: state.userName, token: clientToken });
+    else send({ type: 'create', name: state.userName, token: clientToken });
     beginClockPings();
   });
   socket.addEventListener('message', (event) => {
@@ -370,17 +545,40 @@ function connect() {
   socket.addEventListener('error', () => setConnection('offline', 'Reconnecting'));
 }
 
+// Closing the tab/browser: say goodbye right away so the others see us leave immediately
+// instead of waiting for the server to notice a dead connection.
+window.addEventListener('pagehide', () => {
+  try { state.socket?.close(1000, 'page closed'); } catch { /* already closed */ }
+});
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted && state.socket?.readyState !== WebSocket.OPEN) connect();
+});
+
 function beginClockPings() {
   clearInterval(state.pingTimer);
   clearInterval(state.syncTimer);
   const ping = () => {
     if (state.socket?.readyState === WebSocket.OPEN) send({ type: 'ping', clientSentAt: Date.now() });
   };
-  ping();
-  state.pingTimer = setInterval(ping, 5000);
+  // A quick burst right after connecting gives a good clock estimate before the first play.
+  for (let index = 0; index < 8; index += 1) setTimeout(ping, index * 120);
+  state.pingTimer = setInterval(ping, 4000);
+  // Check drift often and correct gently; large jumps are only for big errors.
   state.syncTimer = setInterval(() => {
     if (state.nowPlaying && state.playback.playing) syncPlayer(false);
-  }, 2000);
+  }, 250);
+}
+
+// Estimates (server clock - local clock). A ping that came back fast was delayed the same amount in
+// both directions, so its offset is the most trustworthy. Averaging the few fastest recent pings
+// removes the jitter that made the old single-sample estimate wander by tens of milliseconds.
+function updateClockOffset(sentAt, receivedAt, serverNow) {
+  const rtt = receivedAt - sentAt;
+  if (!Number.isFinite(serverNow) || rtt < 0 || rtt > 5000) return;
+  state.clockSamples.push({ rtt, offset: serverNow - (sentAt + receivedAt) / 2, at: receivedAt });
+  state.clockSamples = state.clockSamples.filter((sample) => receivedAt - sample.at < 60_000).slice(-24);
+  const best = [...state.clockSamples].sort((a, b) => a.rtt - b.rtt).slice(0, 4);
+  state.syncOffsetMs = best.reduce((sum, sample) => sum + sample.offset, 0) / best.length;
 }
 
 function recordLatency(message) {
@@ -401,7 +599,7 @@ function handleMessage(message) {
   if (message.type === 'pong') {
     const receivedAt = Date.now();
     const sentAt = Number(message.clientSentAt) || receivedAt;
-    state.syncOffsetMs = Number(message.serverNow) - ((sentAt + receivedAt) / 2);
+    updateClockOffset(sentAt, receivedAt, Number(message.serverNow));
     return;
   }
   recordLatency(message);
@@ -445,6 +643,7 @@ function handleMessage(message) {
     case 'chat':
       if (message.message) state.chat = [...state.chat, message.message].slice(-80);
       renderChat(true);
+      showChatFloat(message.message);
       break;
     case 'reaction':
       showReaction(message.reaction);
@@ -466,7 +665,8 @@ function handleMessage(message) {
         if (message.code === 'ROOM_NOT_FOUND' && !wasJoiningFromPrompt) {
           state.roomCode = '';
           clearRoomUrl();
-          send({ type: 'create', name: state.userName });
+          tabStore.set('vinnotube-room', '');
+          send({ type: 'create', name: state.userName, token: clientToken });
         }
       }
       break;
@@ -489,8 +689,9 @@ function applySnapshot(room, serverNow, selfId) {
   state.chat = room.chat || [];
   state.poll = room.poll || null;
   state.countdown = room.countdown || null;
-  if (Number.isFinite(serverNow)) state.syncOffsetMs = serverNow - Date.now();
+  if (Number.isFinite(serverNow) && !state.clockSamples.length) state.syncOffsetMs = serverNow - Date.now();
   setRoomUrl(room.code);
+  tabStore.set('vinnotube-room', room.code);
   $('#roomCode').textContent = room.code;
   renderPeople();
   renderQueue();
@@ -751,25 +952,46 @@ function syncPlayer(force) {
 
     const boundedTarget = duration > 0 ? Math.min(target, Math.max(0, duration - .25)) : target;
     const drift = boundedTarget - current;
-    const shouldSeek = Math.abs(drift) > .5 || (force && Math.abs(drift) > .1);
+    const absDrift = Math.abs(drift);
+    const admin = isAdmin();
     const shouldPlay = state.playback.playing;
     const isPlaying = playerState === window.YT.PlayerState.PLAYING || playerState === window.YT.PlayerState.BUFFERING;
     const isPaused = playerState === window.YT.PlayerState.PAUSED || playerState === window.YT.PlayerState.CUED || playerState === window.YT.PlayerState.UNSTARTED;
+
+    // Work out the playback rate the room wants, and the next step above/below it that this video
+    // supports. YouTube only offers fixed speeds (usually 0.25 apart), so a catch-up nudge is one step.
+    const desiredRate = Number(state.playback.rate) || 1;
+    let rates = [];
+    try { rates = [...(player.getAvailablePlaybackRates() || [])].sort((a, b) => a - b); } catch { /* Not ready yet. */ }
+    const baseIndex = rates.length
+      ? rates.reduce((best, rate, index) => Math.abs(rate - desiredRate) < Math.abs(rates[best] - desiredRate) ? index : best, 0)
+      : -1;
+    const baseRate = baseIndex >= 0 ? rates[baseIndex] : desiredRate;
+    const stepFor = (direction) => (baseIndex >= 0 && rates[baseIndex + direction] !== undefined ? rates[baseIndex + direction] : null);
+
+    // Listeners smooth small drift by speeding up or slowing down briefly instead of seeking (a seek
+    // stalls the picture and sound). The admin is the reference clock, so the admin never nudges.
+    const nudgeable = !admin && shouldPlay && playerState === window.YT.PlayerState.PLAYING;
+    if (!nudgeable) state.nudgeDir = 0;
+    else if (state.nudgeDir && drift * state.nudgeDir <= .05) state.nudgeDir = 0;
+    else if (!state.nudgeDir && absDrift > .12) state.nudgeDir = drift > 0 ? 1 : -1;
+    if (state.nudgeDir && stepFor(state.nudgeDir) === null) state.nudgeDir = 0;
+
+    // While a nudge is running, allow more drift before giving up and seeking.
+    const seekThreshold = admin ? 1.5 : (state.nudgeDir ? 1 : .4);
+    const shouldSeek = absDrift > seekThreshold || (force && absDrift > .1);
     if (shouldSeek || shouldPlay && isPaused || !shouldPlay && isPlaying) {
       state.youtubeRemoteCommandUntil = Date.now() + 1500;
       setRemoteSuppression();
-      if (shouldSeek) player.seekTo(boundedTarget, true);
+      if (shouldSeek) { player.seekTo(boundedTarget, true); state.nudgeDir = 0; }
       if (shouldPlay && isPaused) player.playVideo();
       else if (!shouldPlay && isPlaying) player.pauseVideo();
     }
     try {
-      const desiredRate = Number(state.playback.rate) || 1;
-      const rates = player.getAvailablePlaybackRates();
-      const targetRate = rates?.length
-        ? rates.reduce((closest, rate) => Math.abs(rate - desiredRate) < Math.abs(closest - desiredRate) ? rate : closest, rates[0])
-        : desiredRate;
+      const nudged = state.nudgeDir ? stepFor(state.nudgeDir) : null;
+      const targetRate = nudged ?? baseRate;
       if (Math.abs((player.getPlaybackRate() || 1) - targetRate) > .01) {
-        state.youtubeRemoteCommandUntil = Date.now() + 1800;
+        state.youtubeRemoteCommandUntil = Date.now() + (nudged ? 600 : 1800);
         player.setPlaybackRate(targetRate);
       }
     } catch { /* The player can be between cue and ready states. */ }
@@ -806,20 +1028,25 @@ function syncPlayer(force) {
   const target = targetPlaybackTime();
   const current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
   const drift = target - current;
-  setRemoteSuppression();
-  if (Math.abs(drift) > .5 || force && Math.abs(drift) > .1) {
+  const absDrift = Math.abs(drift);
+  const admin = isAdmin();
+  const baseRate = Number(state.playback.rate) || 1;
+  // Only mute the player's own events while WE are changing something; the old code did it on every
+  // tick, which would also have swallowed the admin's genuine play/pause/seek clicks.
+  if (absDrift > (admin ? 1.5 : .5) || force && absDrift > .1) {
+    setRemoteSuppression();
     try { video.currentTime = target; } catch { /* The stream may not have seek data yet. */ }
-    video.playbackRate = Number(state.playback.rate) || 1;
-  } else if (state.playback.playing && Math.abs(drift) > .12) {
-    video.playbackRate = (Number(state.playback.rate) || 1) * (drift > 0 ? 1.04 : .96);
-    clearTimeout(state.playbackRateTimer);
-    state.playbackRateTimer = setTimeout(() => { video.playbackRate = Number(state.playback.rate) || 1; }, 2200);
+    video.playbackRate = baseRate;
+  } else if (state.playback.playing && !admin && absDrift > .03) {
+    // Proportional catch-up: bigger drift, bigger (but capped) speed change. Pitch is preserved.
+    video.playbackRate = baseRate * (1 + Math.max(-.08, Math.min(.08, drift * .6)));
   } else {
-    video.playbackRate = Number(state.playback.rate) || 1;
+    video.playbackRate = baseRate;
   }
 
   if (state.playback.playing) {
     if (video.paused) {
+      setRemoteSuppression();
       video.play().catch(() => {
         $('#syncText').textContent = 'Tap play to join the stream';
         if (!isAdmin()) {
@@ -829,6 +1056,7 @@ function syncPlayer(force) {
       });
     }
   } else if (!video.paused) {
+    setRemoteSuppression();
     video.pause();
   }
   renderSyncStatus();
@@ -934,25 +1162,26 @@ function makeMovieCard(movie) {
     poster.referrerPolicy = 'no-referrer';
     art.append(poster);
   }
-  const label = document.createElement('div');
-  label.className = 'movie-art-label';
-  const kicker = document.createElement('span');
-  kicker.className = 'cover-kicker';
-  kicker.textContent = `${movie.year || 'ROOM PICK'} · ${movie.genre || 'Shared link'}`;
-  const title = document.createElement('span');
-  title.className = 'cover-title';
-  title.textContent = movie.title;
-  label.append(kicker, title);
-  art.append(label);
+  art.addEventListener('click', () => art.closest('.movie-card')?.querySelector('.watch-button')?.click());
   const body = document.createElement('div');
   body.className = 'movie-card-body';
+  const title = document.createElement('h3');
+  title.className = 'movie-title';
+  title.textContent = movie.title;
+  title.title = movie.title;
+  // One quiet line: type and year on the left, the source link on the right.
   const meta = document.createElement('div');
   meta.className = 'movie-meta';
   const genre = document.createElement('span');
+  genre.className = 'movie-genre';
   genre.textContent = movie.genre || 'Shared link';
-  const category = document.createElement('span');
-  category.textContent = 'VIDEO';
-  meta.append(genre, category);
+  meta.append(genre);
+  if (movie.year) {
+    const year = document.createElement('span');
+    year.className = 'movie-year';
+    year.textContent = movie.year;
+    meta.append(year);
+  }
   const description = document.createElement('p');
   description.className = 'movie-description';
   description.textContent = movie.description || 'A new pick from your group.';
@@ -968,11 +1197,10 @@ function makeMovieCard(movie) {
   openSource.href = movie.src;
   openSource.target = '_blank';
   openSource.rel = 'noopener noreferrer';
-  openSource.textContent = getYouTubeVideoId(movie.src) ? 'Open on YouTube ↗' : 'Open video link ↗';
+  openSource.textContent = getYouTubeVideoId(movie.src) ? 'YouTube ↗' : 'Open link ↗';
+  openSource.title = getYouTubeVideoId(movie.src) ? 'Open on YouTube in a new tab' : 'Open the video link in a new tab';
   openSource.setAttribute('aria-label', `Open ${movie.title} in a new tab`);
-  const sourceRow = document.createElement('div');
-  sourceRow.className = 'movie-source-row';
-  sourceRow.append(openSource);
+  meta.append(openSource);
   const queue = document.createElement('button');
   queue.type = 'button';
   queue.dataset.addQueue = movie.id;
@@ -986,7 +1214,7 @@ function makeMovieCard(movie) {
   favorite.setAttribute('aria-label', `${state.favorites.has(movie.id) ? 'Remove' : 'Save'} ${movie.title} to favorites`);
   favorite.textContent = state.favorites.has(movie.id) ? '♥' : '♡';
   actions.append(watch, queue, favorite);
-  body.append(meta, description, sourceRow, actions);
+  body.append(title, meta, description, actions);
   article.append(art, body);
   return article;
 }
@@ -1092,18 +1320,71 @@ function renderPoll() {
   const attribution = document.createElement('span');
   attribution.textContent = state.poll.open ? `${Object.keys(state.poll.votes || {}).length} votes · Started by ${state.poll.createdBy}` : `Poll closed · ${Object.keys(state.poll.votes || {}).length} votes`;
   meta.append(attribution);
-  if (state.poll.open && canAdminister) {
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.dataset.pollClose = 'true';
-    close.textContent = 'Close poll';
-    meta.append(close);
+  if (canAdminister) {
+    const actions = document.createElement('span');
+    actions.style.cssText = 'display:flex;gap:14px';
+    if (state.poll.open) {
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.dataset.pollClose = 'true';
+      close.textContent = 'Close poll';
+      actions.append(close);
+    }
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.dataset.pollClear = 'true';
+    clear.textContent = 'Clear poll';
+    actions.append(clear);
+    meta.append(actions);
   }
   root.append(question, choices, meta);
 }
 
+// Full-screen alerts: while the player is full screen the page (and chat) is hidden, so other people's
+// messages and reactions float over the video for a few seconds. The viewer can switch this off.
+const fullscreenAlerts = { enabled: local.get('vinnotube-fs-alerts', 'on') !== 'off' };
+
+function applyFullscreenAlerts() {
+  const frame = document.getElementById('playerFrame');
+  frame?.classList.toggle('alerts-off', !fullscreenAlerts.enabled);
+  const button = document.getElementById('alertsButton');
+  if (button) {
+    button.setAttribute('aria-pressed', String(fullscreenAlerts.enabled));
+    button.setAttribute('aria-label', fullscreenAlerts.enabled ? 'Turn off full-screen chat alerts' : 'Turn on full-screen chat alerts');
+    button.title = fullscreenAlerts.enabled ? 'Chat alerts: on' : 'Chat alerts: off';
+    button.classList.toggle('is-off', !fullscreenAlerts.enabled);
+  }
+}
+
+function toggleFullscreenAlerts() {
+  fullscreenAlerts.enabled = !fullscreenAlerts.enabled;
+  local.set('vinnotube-fs-alerts', fullscreenAlerts.enabled ? 'on' : 'off');
+  if (!fullscreenAlerts.enabled) $('#chatFloat')?.replaceChildren();
+  applyFullscreenAlerts();
+}
+
+function showChatFloat(entry) {
+  if (!entry || !fullscreenAlerts.enabled) return;
+  if (entry.participantId && entry.participantId === state.userId) return;
+  const frame = document.getElementById('playerFrame');
+  const root = $('#chatFloat');
+  if (!frame || !root || !frame.classList.contains('is-fullscreen')) return;
+  const bubble = document.createElement('div');
+  bubble.className = 'floating-chat';
+  const name = document.createElement('strong');
+  name.textContent = entry.name || 'Someone';
+  const text = document.createElement('span');
+  const full = String(entry.text || '');
+  text.textContent = full.length > 110 ? `${full.slice(0, 107)}…` : full;
+  bubble.append(name, text);
+  root.append(bubble);
+  while (root.children.length > 3) root.firstElementChild.remove();
+  setTimeout(() => bubble.remove(), 5000);
+}
+
 function showReaction(reaction) {
   if (!reaction) return;
+  if (!fullscreenAlerts.enabled && document.getElementById('playerFrame')?.classList.contains('is-fullscreen')) return;
   const pill = document.createElement('div');
   pill.className = 'floating-reaction';
   const emoji = document.createElement('span');
@@ -1130,8 +1411,21 @@ function createNewRoom() {
   if (!state.connected) return showToast('Reconnecting to start a new room…');
   state.userId = null;
   state.roomCode = '';
+  tabStore.set('vinnotube-room', '');
   clearRoomUrl();
-  send({ type: 'create', name: state.userName });
+  send({ type: 'create', name: state.userName, token: clientToken });
+}
+
+// The circular-arrow button refreshes the room you are already in: same code, same people, same admin.
+function refreshRoom() {
+  if (!state.connected) return showToast('Reconnecting to your room…');
+  if (!state.roomCode) return;
+  const button = $('#newRoomButton');
+  button.classList.remove('is-spinning');
+  void button.offsetWidth;
+  button.classList.add('is-spinning');
+  send({ type: 'join', room: state.roomCode, name: state.userName, token: clientToken });
+  showToast('Room refreshed — you’re still in the same room.');
 }
 
 async function copyInvite() {
@@ -1217,6 +1511,8 @@ function handleClick(event) {
     send({ type: 'pollVote', optionId: target.dataset.pollVote });
   } else if (target.hasAttribute('data-poll-close')) {
     send({ type: 'pollClose' });
+  } else if (target.hasAttribute('data-poll-clear')) {
+    send({ type: 'pollClear' });
   }
 }
 
@@ -1240,7 +1536,10 @@ $('#participantsButton').addEventListener('click', () => {
   requestAnimationFrame(() => card.classList.add('is-highlighted'));
   setTimeout(() => card.classList.remove('is-highlighted'), 1400);
 });
-$('#newRoomButton').addEventListener('click', createNewRoom);
+$('#newRoomButton').addEventListener('click', refreshRoom);
+$('#newRoomInlineButton').addEventListener('click', () => {
+  if (window.confirm('Start a brand-new room? You will leave this one. Friends can still return to it with its code.')) createNewRoom();
+});
 $('#joinRoomButton').addEventListener('click', () => openRoomDialog('join'));
 $('#editNameButton').addEventListener('click', () => openRoomDialog('name'));
 $('#roomForm').addEventListener('submit', (event) => {
@@ -1260,7 +1559,7 @@ $('#roomForm').addEventListener('submit', (event) => {
   if (!state.connected) return showToast('Reconnecting to join that room…');
   state.pendingRoomCode = normalized;
   state.previousRoomCode = state.roomCode;
-  if (send({ type: 'join', room: normalized, name: state.userName })) $('#roomDialog').close?.();
+  if (send({ type: 'join', room: normalized, name: state.userName, token: clientToken })) $('#roomDialog').close?.();
 });
 $('#inviteCopyButton').addEventListener('click', async () => {
   try {
@@ -1352,6 +1651,41 @@ $('#youtubeSeek').addEventListener('change', (event) => {
   }
 });
 
+// Skip forward/back by `delta` seconds (admin only). Rapid repeated skips build on the position
+// we just asked for, because the player can still be reporting the old time for a moment.
+let pendingSeek = { target: 0, until: 0 };
+function adminSeekBy(delta) {
+  if (!isAdmin() || !state.nowPlaying) return false;
+  const youtube = Boolean(getYouTubeVideoId(state.nowPlaying.src));
+  let current = 0;
+  let duration = 0;
+  let playing = false;
+  try {
+    if (youtube) {
+      if (!state.youtubeReady || !state.youtubePlayer) return false;
+      const playerState = state.youtubePlayer.getPlayerState();
+      current = state.youtubePlayer.getCurrentTime() || 0;
+      duration = state.youtubePlayer.getDuration() || 0;
+      playing = playerState === window.YT.PlayerState.PLAYING || playerState === window.YT.PlayerState.BUFFERING;
+    } else {
+      if (video.readyState < 1) return false;
+      current = video.currentTime || 0;
+      duration = Number.isFinite(video.duration) ? video.duration : 0;
+      playing = !video.paused;
+    }
+  } catch { return false; }
+  const base = performance.now() < pendingSeek.until ? pendingSeek.target : current;
+  const target = Math.max(0, Math.min(base + delta, duration > 0 ? Math.max(0, duration - .25) : Infinity));
+  pendingSeek = { target, until: performance.now() + 1200 };
+  const rate = Number(state.playback.rate) || 1;
+  state.youtubeRemoteCommandUntil = Date.now() + 1500;
+  setRemoteSuppression();
+  if (youtube) state.youtubePlayer.seekTo(target, true);
+  else { try { video.currentTime = target; } catch { return false; } }
+  send({ type: 'playback', playing, currentTime: target, rate });
+  return true;
+}
+
 $('#playbackRateSelect').addEventListener('change', (event) => {
   if (!isAdmin() || !state.nowPlaying) return;
   const rate = Number(event.currentTarget.value);
@@ -1416,3 +1750,226 @@ renderPoll();
 renderReadyCheck();
 $('#editNameButton').textContent = initials(state.userName);
 connect();
+
+/* ---- Player chrome: full screen, auto-hiding controls, click-to-pause ----
+   Additive UI layer. It only toggles classes, adds one button and forwards clicks to the existing
+   play button, so room sync and admin rules in the code above are unchanged. */
+(() => {
+  const frame = document.getElementById('playerFrame');
+  const controls = document.getElementById('youtubeControls');
+  const playButton = document.getElementById('youtubePlayButton');
+  const volumeGroup = document.querySelector('.player-volume');
+  if (!frame || !controls || !playButton || !volumeGroup) return;
+
+  const IDLE_MS = 2800;
+  const canFullscreen = Boolean(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  let lastActivity = Date.now();
+  let lastPointerType = 'mouse';
+  let clickTimer = 0;
+
+  // Catches pointer events that would otherwise land inside the YouTube iframe, which is what
+  // kept YouTube's own title bar, logo and "More videos" panel appearing over our controls.
+  const shield = document.createElement('div');
+  shield.className = 'player-shield';
+  shield.id = 'playerShield';
+  frame.insertBefore(shield, controls);
+
+  const isPlaying = () => playButton.textContent.trim() === 'Ⅱ';
+  const wake = () => { lastActivity = Date.now(); frame.classList.remove('controls-idle'); };
+  // Mouse clicks leave focus on whichever control was clicked (the full-screen button, the play button),
+  // so focus alone must not keep the bar open. Only keyboard focus, or an open speed dropdown, does.
+  let keyboardNav = false;
+  window.addEventListener('keydown', (event) => { if (event.key === 'Tab') keyboardNav = true; }, true);
+  window.addEventListener('pointerdown', () => { keyboardNav = false; }, true);
+  controls.addEventListener('change', (event) => { if (event.target.tagName === 'SELECT') event.target.blur(); });
+  const evaluate = () => {
+    const active = document.activeElement;
+    const inControls = Boolean(active && controls.contains(active));
+    const busy = !isPlaying() || (inControls && (keyboardNav || active.tagName === 'SELECT'));
+    frame.classList.toggle('controls-idle', !busy && Date.now() - lastActivity > IDLE_MS);
+  };
+  setInterval(evaluate, 400);
+
+  frame.addEventListener('pointermove', wake);
+  frame.addEventListener('pointerdown', (event) => { lastPointerType = event.pointerType || 'mouse'; wake(); });
+  frame.addEventListener('keydown', wake);
+  frame.addEventListener('focusin', wake);
+  frame.addEventListener('pointerleave', () => { lastActivity = Date.now() - IDLE_MS + 700; });
+
+  async function toggleFullscreen() {
+    try {
+      if (fullscreenElement()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else await (frame.requestFullscreen || frame.webkitRequestFullscreen).call(frame);
+    } catch { /* The browser refused full screen (for example, no user gesture). */ }
+  }
+
+  const alertsButton = document.createElement('button');
+  alertsButton.type = 'button';
+  alertsButton.id = 'alertsButton';
+  alertsButton.className = 'alerts-toggle';
+  alertsButton.innerHTML = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path class="alerts-slash" d="M4 4l16 16"/></svg>';
+  alertsButton.addEventListener('click', toggleFullscreenAlerts);
+  volumeGroup.append(alertsButton);
+  applyFullscreenAlerts();
+
+  let fullscreenButton = null;
+  if (canFullscreen) {
+    fullscreenButton = document.createElement('button');
+    fullscreenButton.type = 'button';
+    fullscreenButton.id = 'fullscreenButton';
+    fullscreenButton.addEventListener('click', toggleFullscreen);
+    volumeGroup.append(fullscreenButton);
+  }
+  const ICON_ENTER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+  const ICON_EXIT = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+  function syncFullscreenState() {
+    const active = fullscreenElement() === frame;
+    frame.classList.toggle('is-fullscreen', active);
+    if (fullscreenButton) {
+      fullscreenButton.innerHTML = active ? ICON_EXIT : ICON_ENTER;
+      fullscreenButton.setAttribute('aria-label', active ? 'Exit full screen' : 'Full screen');
+      fullscreenButton.title = active ? 'Exit full screen (F)' : 'Full screen (F)';
+    }
+    if (fullscreenButton && !keyboardNav) fullscreenButton.blur();
+    wake();
+  }
+  document.addEventListener('fullscreenchange', syncFullscreenState);
+  document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+  syncFullscreenState();
+
+  // Taps on the video:
+  //   single tap            = play/pause (admin only, via the existing button)
+  //   admin double-tap left/right third = back/forward 5 s; keep tapping the same side to keep skipping
+  //   double-tap elsewhere (or any double-tap for non-admins) = full screen
+  // Double taps are detected from the clicks themselves because mobile browsers don't reliably fire dblclick.
+  const SKIP_SECONDS = 5;
+  const DOUBLE_TAP_MS = 300;
+  const STREAK_MS = 900;
+  let lastTapAt = 0;
+  let lastTapX = 0;
+  let streak = { side: 0, until: 0, total: 0 };
+  let feedbackTimer = 0;
+
+  const feedback = [-1, 1].map((side) => {
+    const element = document.createElement('div');
+    element.className = `skip-feedback ${side < 0 ? 'skip-back' : 'skip-forward'}`;
+    element.setAttribute('aria-hidden', 'true');
+    element.innerHTML = `<span class="skip-arrows">${side < 0 ? '◀◀' : '▶▶'}</span><span class="skip-text"></span>`;
+    frame.insertBefore(element, controls);
+    return element;
+  });
+  function showSkipFeedback(side, total) {
+    const [back, forward] = feedback;
+    const element = side < 0 ? back : forward;
+    (side < 0 ? forward : back).classList.remove('show');
+    element.querySelector('.skip-text').textContent = `${side < 0 ? '−' : '+'}${total} seconds`;
+    element.classList.remove('show');
+    void element.offsetWidth; // restart the pulse animation on every tap
+    element.classList.add('show');
+    clearTimeout(feedbackTimer);
+    feedbackTimer = setTimeout(() => element.classList.remove('show'), STREAK_MS);
+  }
+  function skip(side) {
+    const now = performance.now();
+    const total = streak.side === side && now < streak.until ? streak.total + SKIP_SECONDS : SKIP_SECONDS;
+    if (!adminSeekBy(side * SKIP_SECONDS)) return;
+    streak = { side, until: now + STREAK_MS, total };
+    showSkipFeedback(side, total);
+  }
+
+  shield.addEventListener('click', (event) => {
+    const wasIdle = frame.classList.contains('controls-idle');
+    wake();
+    const now = performance.now();
+    const rect = shield.getBoundingClientRect();
+    const ratio = rect.width ? (event.clientX - rect.left) / rect.width : .5;
+    const side = ratio < .35 ? -1 : ratio > .65 ? 1 : 0;
+    const doubleTap = now - lastTapAt < DOUBLE_TAP_MS && Math.abs(ratio - lastTapX) < .2;
+    const continuingStreak = side !== 0 && streak.side === side && now < streak.until;
+    lastTapAt = now;
+    lastTapX = ratio;
+
+    if (isAdmin() && side !== 0 && (doubleTap || continuingStreak)) {
+      clearTimeout(clickTimer);
+      lastTapAt = 0;
+      skip(side);
+      return;
+    }
+    if (doubleTap) {
+      clearTimeout(clickTimer);
+      lastTapAt = 0;
+      if (canFullscreen) toggleFullscreen();
+      return;
+    }
+    // The first tap on a touch screen only brings the controls back (but still counts toward a double tap).
+    if (lastPointerType === 'touch' && wasIdle) return;
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => playButton.click(), DOUBLE_TAP_MS);
+  });
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key.toLowerCase() !== 'f' || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.target.closest?.('input, textarea, select, [contenteditable], dialog')) return;
+    if (!canFullscreen || controls.hidden) return;
+    toggleFullscreen();
+  });
+})();
+
+/* ---- Premium polish: scroll-aware top bar, nav highlighting, reveal-on-scroll, slider fill ----
+   Purely cosmetic. It only toggles classes / CSS variables and forwards clicks to existing controls. */
+(() => {
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Top bar turns from transparent to frosted glass once the page scrolls.
+  const onScroll = () => document.body.classList.toggle('scrolled', window.scrollY > 8);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Nav underline follows whichever section is on screen.
+  const links = [...document.querySelectorAll('.nav-link')];
+  const sections = links.map((link) => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+  if ('IntersectionObserver' in window && sections.length) {
+    const spy = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        links.forEach((link) => link.classList.toggle('active', link.getAttribute('href') === `#${entry.target.id}`));
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    sections.forEach((section) => spy.observe(section));
+  }
+
+  // Gentle fade-up as sections arrive.
+  if (!reduceMotion && 'IntersectionObserver' in window) {
+    const reveal = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add('in-view');
+        reveal.unobserve(entry.target);
+      });
+    }, { threshold: 0.08 });
+    document.querySelectorAll('.discover-section, .page-footer').forEach((el) => {
+      el.classList.add('reveal');
+      reveal.observe(el);
+    });
+  }
+
+  // Search icon in the top bar, plus the hero's invite button, reuse existing behaviour.
+  document.getElementById('navSearchButton')?.addEventListener('click', () => {
+    document.getElementById('discover')?.scrollIntoView({ behavior: 'smooth' });
+    setTimeout(() => document.getElementById('movieSearch')?.focus({ preventScroll: true }), 450);
+  });
+  document.getElementById('heroInviteButton')?.addEventListener('click', () => document.getElementById('inviteButton')?.click());
+
+  // Colour the filled part of the seek and volume sliders.
+  const sliders = ['youtubeSeek', 'volumeRange'].map((id) => document.getElementById(id)).filter(Boolean);
+  const paint = () => sliders.forEach((input) => {
+    const min = Number(input.min) || 0;
+    const max = Number(input.max) || 100;
+    const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
+    input.style.setProperty('--fill', `${Math.min(100, Math.max(0, pct))}%`);
+  });
+  sliders.forEach((input) => input.addEventListener('input', paint));
+  setInterval(paint, 250);
+  paint();
+})();

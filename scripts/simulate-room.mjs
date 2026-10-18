@@ -82,12 +82,11 @@ try {
     (message) => message.type === 'participants' && message.participants?.length === clientCount,
   )));
 
-  const adminCursors = clients.map((client) => client.messages.length);
-  cursor = first.messages.length;
-  first.send({ type: 'claimAdmin' });
-  await Promise.all(clients.map((client, index) => client.waitFor(
+  // The room creator is made admin automatically, so no claim is needed: every client should
+  // already have been told that the first participant is the admin.
+  await Promise.all(clients.map((client) => client.waitFor(
     (message) => message.type === 'participants' && message.adminId === adminId,
-    adminCursors[index],
+    0,
   )));
 
   cursor = first.messages.length;
@@ -96,7 +95,7 @@ try {
     item: {
       id: 'vinnotube-load-test',
       title: 'VinnoTube room test',
-      src: 'https://www.youtube.com/watch?v=9QbltzIUV6w',
+      src: 'https://www.youtube.com/watch?v=eRsGyueVLvQ',
       genre: 'Test',
       year: 'TEST',
       description: 'Temporary video for a local room sync check.',
